@@ -20,21 +20,21 @@
  * THE SOFTWARE.
  */
 
-#include <sched.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <assert.h>
-#include <inttypes.h>
-#include <getopt.h>
 #include <arpa/inet.h>
-#include <sys/time.h>
+#include <assert.h>
+#include <getopt.h>
+#include <inttypes.h>
+#include <sched.h>
 #include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/time.h>
+#include <unistd.h>
 
-#include <rte_eal.h>
-#include <rte_ether.h>
-#include <rte_ethdev.h>
 #include <rte_cycles.h>
+#include <rte_eal.h>
+#include <rte_ethdev.h>
+#include <rte_ether.h>
 #include <rte_lcore.h>
 #include <rte_mbuf.h>
 
@@ -61,16 +61,19 @@
 
 //#define SCATTERED_RX_TEST
 #ifdef SCATTERED_RX_TEST
-#define MBUF_BUF_SIZE     512
+#define MBUF_BUF_SIZE 512
 #else
-#define MBUF_BUF_SIZE    RTE_MBUF_DEFAULT_BUF_SIZE
+#define MBUF_BUF_SIZE RTE_MBUF_DEFAULT_BUF_SIZE
 #endif
 
-#define print_mac_addr(addr) printf("%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8":%02"PRIx8, \
-  addr.addr_bytes[0], addr.addr_bytes[1], addr.addr_bytes[2], addr.addr_bytes[3], addr.addr_bytes[4], addr.addr_bytes[5])
+#define print_mac_addr(addr)                                                   \
+  printf("%02" PRIx8 ":%02" PRIx8 ":%02" PRIx8 ":%02" PRIx8 ":%02" PRIx8       \
+         ":%02" PRIx8,                                                         \
+         addr.addr_bytes[0], addr.addr_bytes[1], addr.addr_bytes[2],           \
+         addr.addr_bytes[3], addr.addr_bytes[4], addr.addr_bytes[5])
 
-static struct rte_mempool *mbuf_pool[RTE_MAX_LCORE] = { NULL };
-static pfring_ft_table *fts[RTE_MAX_LCORE] = { NULL };
+static struct rte_mempool *mbuf_pool[RTE_MAX_LCORE] = {NULL};
+static pfring_ft_table *fts[RTE_MAX_LCORE] = {NULL};
 static u_int32_t ft_flags = 0;
 static u_int8_t port = 0, twin_port = 0xFF;
 static u_int8_t num_queues = 1;
@@ -82,13 +85,15 @@ static u_int8_t fwd = 0;
 static u_int8_t test_tx = 0;
 static u_int8_t tx_csum_offload = 0;
 static u_int8_t set_if_mac = 0;
+static u_int8_t set_dst_mac = 0;
 static u_int8_t promisc = 1;
 static u_int16_t mtu = 0;
 static u_int16_t port_speed = 0;
 static u_int16_t tx_test_pkt_len = TX_TEST_PKT_LEN;
 static u_int32_t num_mbufs_per_lcore = 0;
 static u_int32_t pps = 0;
-static struct ether_addr if_mac = { 0 };
+static struct ether_addr if_mac = {0};
+static struct ether_addr dst_if_mac = {0};
 
 static struct lcore_stats {
   u_int64_t num_pkts;
@@ -101,8 +106,7 @@ static struct lcore_stats {
 } stats[RTE_MAX_LCORE];
 
 static const struct rte_eth_conf port_conf_default = {
-  .rxmode = { .max_rx_pkt_len = ETHER_MAX_LEN }
-};
+    .rxmode = {.max_rx_pkt_len = ETHER_MAX_LEN}};
 
 /* ************************************ */
 
@@ -114,33 +118,34 @@ static int port_init(void) {
   char name[64];
   int num_ports;
 
-  if (twin_port == 0xFF || twin_port == port) num_ports = 1;
-  else num_ports = 2;
+  if (twin_port == 0xFF || twin_port == port)
+    num_ports = 1;
+  else
+    num_ports = 2;
 
-  num_mbufs_per_lcore = 2 * (
-    RX_RING_SIZE + 
-    TX_RING_SIZE + 
-    BURST_SIZE * 2) 
+  num_mbufs_per_lcore =
+      2 * (RX_RING_SIZE + TX_RING_SIZE + BURST_SIZE * 2)
 #ifdef SCATTERED_RX_TEST
-    * 4
+      * 4
 #endif
-    * (mtu ? (((mtu + ETHER_MAX_LEN - 1500) / MBUF_BUF_SIZE) + 1) : 1)
-  ;
+      * (mtu ? (((mtu + ETHER_MAX_LEN - 1500) / MBUF_BUF_SIZE) + 1) : 1);
 
   for (q = 0; q < num_queues; q++) {
     snprintf(name, sizeof(name), "MBUF_POOL_%u", q);
 
-    mbuf_pool[q] = rte_pktmbuf_pool_create(name, num_mbufs_per_lcore, MBUF_CACHE_SIZE, 0, 
-      MBUF_BUF_SIZE, rte_socket_id());
+    mbuf_pool[q] =
+        rte_pktmbuf_pool_create(name, num_mbufs_per_lcore, MBUF_CACHE_SIZE, 0,
+                                MBUF_BUF_SIZE, rte_socket_id());
 
     if (mbuf_pool[q] == NULL)
-      rte_exit(EXIT_FAILURE, "Cannot create mbuf pool: %s\n", rte_strerror(rte_errno));
+      rte_exit(EXIT_FAILURE, "Cannot create mbuf pool: %s\n",
+               rte_strerror(rte_errno));
   }
 
   for (i = 0; i < num_ports; i++) {
     u_int8_t port_id = (i == 0) ? port : twin_port;
     unsigned int numa_socket_id;
-    
+
     printf("Configuring port %u...\n", port_id);
 
     fc_conf.mode = RTE_FC_NONE;
@@ -151,13 +156,26 @@ static int port_init(void) {
 
     if (port_speed) {
       switch (port_speed) {
-      case   1: port_conf.link_speeds = ETH_LINK_SPEED_1G;   break;
-      case  10: port_conf.link_speeds = ETH_LINK_SPEED_10G;  break;
-      case  25: port_conf.link_speeds = ETH_LINK_SPEED_25G;  break;
-      case  40: port_conf.link_speeds = ETH_LINK_SPEED_40G;  break;
-      case  50: port_conf.link_speeds = ETH_LINK_SPEED_50G;  break;
-      case 100: port_conf.link_speeds = ETH_LINK_SPEED_100G; break;
-      default: break;
+      case 1:
+        port_conf.link_speeds = ETH_LINK_SPEED_1G;
+        break;
+      case 10:
+        port_conf.link_speeds = ETH_LINK_SPEED_10G;
+        break;
+      case 25:
+        port_conf.link_speeds = ETH_LINK_SPEED_25G;
+        break;
+      case 40:
+        port_conf.link_speeds = ETH_LINK_SPEED_40G;
+        break;
+      case 50:
+        port_conf.link_speeds = ETH_LINK_SPEED_50G;
+        break;
+      case 100:
+        port_conf.link_speeds = ETH_LINK_SPEED_100G;
+        break;
+      default:
+        break;
       }
       port_conf.link_speeds |= ETH_LINK_SPEED_FIXED;
     }
@@ -168,7 +186,7 @@ static int port_init(void) {
     retval = rte_eth_dev_configure(port_id, num_queues /* RX */, num_queues /* TX */, &port_conf);
     
     if (retval != 0)
-      return retval;    
+      return retval;
 
     if (mtu) {
       if (rte_eth_dev_set_mtu(port_id, mtu) != 0)
@@ -178,20 +196,22 @@ static int port_init(void) {
     }
 
     numa_socket_id = rte_eth_dev_socket_id(port_id);
-    
+
     for (q = 0; q < num_queues; q++) {
 
       printf("Configuring queue %u...\n", q);
 
-      retval = rte_eth_rx_queue_setup(port_id, q, RX_RING_SIZE, numa_socket_id, NULL, mbuf_pool[q]);
+      retval = rte_eth_rx_queue_setup(port_id, q, RX_RING_SIZE, numa_socket_id,
+                                      NULL, mbuf_pool[q]);
 
       if (retval < 0)
-	return retval;
+        return retval;
 
-      retval = rte_eth_tx_queue_setup(port_id, q, TX_RING_SIZE, numa_socket_id, NULL);
+      retval = rte_eth_tx_queue_setup(port_id, q, TX_RING_SIZE, numa_socket_id,
+                                      NULL);
 
       if (retval < 0)
-	return retval;
+        return retval;
     }
 
     retval = rte_eth_dev_start(port_id);
@@ -205,13 +225,13 @@ static int port_init(void) {
     if (rte_eth_dev_set_link_up(port_id) < 0)
       printf("Unable to set link up\n");
   }
- 
+
   if (set_if_mac) {
     retval = rte_eth_dev_default_mac_addr_set(port, &if_mac);
     if (retval != 0)
       printf("Unable to set the interface MAC address (%d)\n", retval);
   }
- 
+
   return 0;
 }
 
@@ -222,8 +242,9 @@ static void port_close(void) {
 
   for (i = 0; i < 2; i++) {
     u_int8_t port_id = (i == 0) ? port : twin_port;
-    
-    if (port_id == 0xFF || (i == 1 && twin_port == port)) break;
+
+    if (port_id == 0xFF || (i == 1 && twin_port == port))
+      break;
 
     printf("Releasing port %u...\n", port_id);
 
@@ -235,7 +256,7 @@ static void port_close(void) {
 /* ************************************ */
 
 void processFlow(pfring_ft_flow *flow, void *user) {
-  pfring_ft_table *ft = (pfring_ft_table *) user;
+  pfring_ft_table *ft = (pfring_ft_table *)user;
   pfring_ft_flow_key *k;
   pfring_ft_flow_value *v;
   char buf1[32], buf2[32], buf3[32];
@@ -244,7 +265,7 @@ void processFlow(pfring_ft_flow *flow, void *user) {
   k = pfring_ft_flow_get_key(flow);
   v = pfring_ft_flow_get_value(flow);
 
-  if (k->ip_version == 4){
+  if (k->ip_version == 4) {
     ip1 = _intoa(k->saddr.v4, buf1, sizeof(buf1));
     ip2 = _intoa(k->daddr.v4, buf2, sizeof(buf2));
   } else {
@@ -253,18 +274,25 @@ void processFlow(pfring_ft_flow *flow, void *user) {
   }
 
   printf("[Flow] "
-         "srcIp: %s, dstIp: %s, srcPort: %u, dstPort: %u, protocol: %u, tcpFlags: 0x%02X, "
+         "srcIp: %s, dstIp: %s, srcPort: %u, dstPort: %u, protocol: %u, "
+         "tcpFlags: 0x%02X, "
          "l7: %s, "
          "c2s: { Packets: %ju, Bytes: %ju, First: %u.%u, Last: %u.%u }, "
          "s2c: { Packets: %ju, Bytes: %ju, First: %u.%u, Last: %u.%u }\n",
-         ip1, ip2, k->sport, k->dport, k->protocol, v->direction[s2d_direction].tcp_flags | v->direction[d2s_direction].tcp_flags,
+         ip1, ip2, k->sport, k->dport, k->protocol,
+         v->direction[s2d_direction].tcp_flags |
+             v->direction[d2s_direction].tcp_flags,
          pfring_ft_l7_protocol_name(ft, &v->l7_protocol, buf3, sizeof(buf3)),
-         v->direction[s2d_direction].pkts, v->direction[s2d_direction].bytes, 
-         (u_int) v->direction[s2d_direction].first.tv_sec, (u_int) v->direction[s2d_direction].first.tv_usec, 
-         (u_int) v->direction[s2d_direction].last.tv_sec,  (u_int) v->direction[s2d_direction].last.tv_usec,
-         v->direction[d2s_direction].pkts, v->direction[d2s_direction].bytes, 
-         (u_int) v->direction[d2s_direction].first.tv_sec, (u_int) v->direction[d2s_direction].first.tv_usec, 
-         (u_int) v->direction[d2s_direction].last.tv_sec,  (u_int) v->direction[d2s_direction].last.tv_usec);
+         v->direction[s2d_direction].pkts, v->direction[s2d_direction].bytes,
+         (u_int)v->direction[s2d_direction].first.tv_sec,
+         (u_int)v->direction[s2d_direction].first.tv_usec,
+         (u_int)v->direction[s2d_direction].last.tv_sec,
+         (u_int)v->direction[s2d_direction].last.tv_usec,
+         v->direction[d2s_direction].pkts, v->direction[d2s_direction].bytes,
+         (u_int)v->direction[d2s_direction].first.tv_sec,
+         (u_int)v->direction[d2s_direction].first.tv_usec,
+         (u_int)v->direction[d2s_direction].last.tv_sec,
+         (u_int)v->direction[d2s_direction].last.tv_usec);
 
   pfring_ft_flow_free(flow);
 }
@@ -276,6 +304,7 @@ static void tx_test(u_int16_t queue_id) {
   u_int32_t i;
   u_int16_t sent;
   int rc;
+  u_char *buffer;
 #if !(defined(__arm__) || defined(__mips__))
   ticks tick_start = 0, tick_delta = 0;
 
@@ -294,8 +323,8 @@ static void tx_test(u_int16_t queue_id) {
     hz = (getticks() - tick_start - tick_delta) * 1000 /*kHz -> Hz*/;
     printf("Estimated CPU freq: %lu Hz\n", (long unsigned int)hz);
 
-    td = (double) (hz / pps);
-    tick_delta = (ticks) td;
+    td = (double)(hz / pps);
+    tick_delta = (ticks)td;
     printf("Rate set to %u pps\n", pps);
   }
 #endif
@@ -306,17 +335,23 @@ static void tx_test(u_int16_t queue_id) {
 
   while (do_loop) {
 
-    rc = rte_mempool_get_bulk(mbuf_pool[queue_id], (void **) tx_bufs, BURST_SIZE);
+    rc =
+        rte_mempool_get_bulk(mbuf_pool[queue_id], (void **)tx_bufs, BURST_SIZE);
 
     if (rc) {
       fprintf(stderr, "rte_mempool_get_bulk error (%d)\n", rc);
       return;
     }
-  
+
     for (i = 0; i < BURST_SIZE; i++) {
+      buffer = (u_char *)rte_pktmbuf_mtod(tx_bufs[i], char *);
       if (tx_bufs[i]->data_len != tx_test_pkt_len) {
-        forge_udp_packet_fast((u_char *) rte_pktmbuf_mtod(tx_bufs[i], char *), 
-          tx_test_pkt_len, stats[queue_id].tx_num_pkts + i);
+        rte_memcpy(buffer,
+          (u_char *)&dst_if_mac, sizeof(dst_if_mac));
+        rte_memcpy(&buffer[6],
+          (u_char *)&if_mac, sizeof(if_mac));
+        forge_udp_packet_fast(buffer,
+                              tx_test_pkt_len, stats[queue_id].tx_num_pkts + i);
         tx_bufs[i]->data_len = tx_bufs[i]->pkt_len = tx_test_pkt_len;
         if (tx_csum_offload)
           tx_bufs[i]->ol_flags |= PKT_TX_IP_CKSUM | PKT_TX_UDP_CKSUM;
@@ -329,15 +364,17 @@ static void tx_test(u_int16_t queue_id) {
     stats[queue_id].tx_drops += (BURST_SIZE - sent);
 
     if (sent < BURST_SIZE)
-      rte_mempool_put_bulk(mbuf_pool[queue_id], (void **) &tx_bufs[sent], BURST_SIZE - sent);
+      rte_mempool_put_bulk(mbuf_pool[queue_id], (void **)&tx_bufs[sent],
+                           BURST_SIZE - sent);
 
 #if !(defined(__arm__) || defined(__mips__))
     if (pps > 0) {
-      while ((getticks() - tick_start) < (stats[queue_id].tx_num_pkts * tick_delta))
-        if (unlikely(!do_loop)) break;
+      while ((getticks() - tick_start) <
+             (stats[queue_id].tx_num_pkts * tick_delta))
+        if (unlikely(!do_loop))
+          break;
     }
 #endif
-
   }
 }
 
@@ -348,7 +385,7 @@ static int packet_consumer(__attribute__((unused)) void *arg) {
   u_int16_t queue_id = lcore_id;
   pfring_ft_table *ft;
   pfring_ft_pcap_pkthdr h;
-  pfring_ft_ext_pkthdr ext_hdr = { 0 };
+  pfring_ft_ext_pkthdr ext_hdr = {0};
   struct rte_mbuf *bufs[BURST_SIZE];
   struct rte_mbuf *tx_bufs[BURST_SIZE];
   struct rte_mbuf *mseg;
@@ -380,66 +417,67 @@ static int packet_consumer(__attribute__((unused)) void *arg) {
 
   while (do_loop) {
     u_int32_t idx;
-    
+
     for (idx = 0; idx < num_ports; idx++) {
-      u_int8_t in_port      = ports[idx];
-      u_int8_t out_port_id = ports[idx^1];
-      
+      u_int8_t in_port = ports[idx];
+      u_int8_t out_port_id = ports[idx ^ 1];
+
       num = rte_eth_rx_burst(in_port, queue_id, bufs, BURST_SIZE);
 
       if (unlikely(num == 0)) {
         if (likely(compute_flows))
-	  pfring_ft_housekeeping(ft, time(NULL));
-	continue;
+          pfring_ft_housekeeping(ft, time(NULL));
+        continue;
       }
 
       for (i = 0; i < PREFETCH_OFFSET && i < num; i++)
-	rte_prefetch0(rte_pktmbuf_mtod(bufs[i], void *));
+        rte_prefetch0(rte_pktmbuf_mtod(bufs[i], void *));
 
       tx_num = 0;
       for (i = 0; i < num; i++) {
-	char *data = rte_pktmbuf_mtod(bufs[i], char *);
-	int len = rte_pktmbuf_pkt_len(bufs[i]);
-	pfring_ft_action action = PFRING_FT_ACTION_DEFAULT;
-	
-	if (likely(compute_flows)) {
+        char *data = rte_pktmbuf_mtod(bufs[i], char *);
+        int len = rte_pktmbuf_pkt_len(bufs[i]);
+        pfring_ft_action action = PFRING_FT_ACTION_DEFAULT;
+
+        if (likely(compute_flows)) {
           h.len = h.caplen = len;
           gettimeofday(&h.ts, NULL);
 
-	  action = pfring_ft_process(ft, (const u_char *) data, &h, &ext_hdr);
+          action = pfring_ft_process(ft, (const u_char *)data, &h, &ext_hdr);
         }
- 
+
         stats[queue_id].num_pkts++;
         stats[queue_id].num_bytes += len + 24;
 
-	if (unlikely(verbose)) {
-	  int j;
+        if (unlikely(verbose)) {
+          int j;
 
-	  printf("[Q#%u][Packet] len: %u segs: %u", queue_id, len, bufs[i]->nb_segs);
+          printf("[Q#%u][Packet] len: %u segs: %u", queue_id, len,
+                 bufs[i]->nb_segs);
 
- 	  if (action == PFRING_FT_ACTION_DISCARD)
-	    printf(" [discard]");
-         
+          if (action == PFRING_FT_ACTION_DISCARD)
+            printf(" [discard]");
+
           mseg = bufs[i];
           while (mseg && mseg->data_len) {
             printf("\n[data] len: %u hex: ", mseg->data_len);
-	    data = rte_pktmbuf_mtod(mseg, char *);
-  	    for (j = 0; j < mseg->data_len; j++)
-	      printf("%02X ", data[j] & 0xFF);
+            data = rte_pktmbuf_mtod(mseg, char *);
+            for (j = 0; j < mseg->data_len; j++)
+              printf("%02X ", data[j] & 0xFF);
             mseg = mseg->next;
           }
 
-	  printf("\n");
-	}
+          printf("\n");
+        }
 
-	if (fwd && action != PFRING_FT_ACTION_DISCARD) {
+        if (fwd && action != PFRING_FT_ACTION_DISCARD) {
           tx_bufs[tx_num++] = bufs[i];
         } else {
           rte_pktmbuf_free(bufs[i]);
         }
       }
 
-      if (tx_num > 0) {        
+      if (tx_num > 0) {
         sent = rte_eth_tx_burst(out_port_id, queue_id, tx_bufs, tx_num);
         stats[queue_id].tx_num_pkts += sent;
         stats[queue_id].tx_drops += (tx_num - sent);
@@ -448,7 +486,7 @@ static int packet_consumer(__attribute__((unused)) void *arg) {
       }
 
     } /* for */
-  } /* while */
+  }   /* while */
 
   return 0;
 }
@@ -462,7 +500,8 @@ static void print_help(void) {
   printf("-7              Enable L7 protocol detection (nDPI)\n");
   printf("-n <num cores>  Enable multiple cores/queues (default: 1)\n");
   printf("-0              Do not compute flows (packet capture only)\n");
-  printf("-F              Enable forwarding when 2 ports are specified in -p\n");
+  printf(
+      "-F              Enable forwarding when 2 ports are specified in -p\n");
   printf("-M <addr>       Set the port MAC address\n");
   printf("-U              Do not set promisc\n");
   printf("-S <speed>      Set the port speed in Gbit/s (1/10/25/40/50/100)\n");
@@ -484,13 +523,12 @@ static int parse_args(int argc, char **argv) {
   int option_index;
   char *prgname = argv[0];
   u_int mac_a, mac_b, mac_c, mac_d, mac_e, mac_f;
-  static struct option lgopts[] = {
-    { NULL, 0, 0, 0 }
-  };
+  static struct option lgopts[] = {{NULL, 0, 0, 0}};
 
   argvopt = argv;
 
-  while ((opt = getopt_long(argc, argvopt, "FhHm:M:n:p:tUvP:S:T:K07", lgopts, &option_index)) != EOF) {
+  while ((opt = getopt_long(argc, argvopt, "Fhm:M:d:n:p:tUvP:S:T:K07", lgopts,
+                            &option_index)) != EOF) {
     switch (opt) {
     case 'F':
       fwd = 1;
@@ -503,13 +541,26 @@ static int parse_args(int argc, char **argv) {
       hw_stats = 1;
       break;
     case 'M':
-      if(sscanf(optarg, "%02X:%02X:%02X:%02X:%02X:%02X", &mac_a, &mac_b, &mac_c, &mac_d, &mac_e, &mac_f) != 6) {
-	printf("Invalid MAC address format (XX:XX:XX:XX:XX:XX)\n");
-	exit(0);
+      if (sscanf(optarg, "%02X:%02X:%02X:%02X:%02X:%02X", &mac_a, &mac_b,
+                 &mac_c, &mac_d, &mac_e, &mac_f) != 6) {
+        printf("Invalid MAC address format (XX:XX:XX:XX:XX:XX)\n");
+        exit(0);
       }
-      if_mac.addr_bytes[0] = mac_a, if_mac.addr_bytes[1] = mac_b, if_mac.addr_bytes[2] = mac_c,
-      if_mac.addr_bytes[3] = mac_d, if_mac.addr_bytes[4] = mac_e, if_mac.addr_bytes[5] = mac_f;
+      if_mac.addr_bytes[0] = mac_a, if_mac.addr_bytes[1] = mac_b,
+      if_mac.addr_bytes[2] = mac_c, if_mac.addr_bytes[3] = mac_d,
+      if_mac.addr_bytes[4] = mac_e, if_mac.addr_bytes[5] = mac_f;
       set_if_mac = 1;
+      break;
+    case 'd':
+      if (sscanf(optarg, "%02X:%02X:%02X:%02X:%02X:%02X", &mac_a, &mac_b,
+                 &mac_c, &mac_d, &mac_e, &mac_f) != 6) {
+        printf("Invalid MAC address format (XX:XX:XX:XX:XX:XX)\n");
+        exit(0);
+      }
+      dst_if_mac.addr_bytes[0] = mac_a, dst_if_mac.addr_bytes[1] = mac_b,
+      dst_if_mac.addr_bytes[2] = mac_c, dst_if_mac.addr_bytes[3] = mac_d,
+      dst_if_mac.addr_bytes[4] = mac_e, dst_if_mac.addr_bytes[5] = mac_f;
+      set_dst_mac = 1;
       break;
     case 'm':
       mtu = atoi(optarg);
@@ -520,15 +571,15 @@ static int parse_args(int argc, char **argv) {
       }
       break;
     case 'p':
-      if(optarg) {
-	char *p = strtok(optarg, ",");
+      if (optarg) {
+        char *p = strtok(optarg, ",");
 
-	if(p) {
-	  port = atoi(p);
-	  p = strtok(NULL, ",");
-	  if(p)
-	    twin_port = atoi(p);
-	}
+        if (p) {
+          port = atoi(p);
+          p = strtok(NULL, ",");
+          if (p)
+            twin_port = atoi(p);
+        }
       }
       break;
     case 't':
@@ -546,7 +597,8 @@ static int parse_args(int argc, char **argv) {
       break;
     case 'T':
       tx_test_pkt_len = atoi(optarg);
-      if (tx_test_pkt_len < 60) tx_test_pkt_len = 60; 
+      if (tx_test_pkt_len < 60)
+        tx_test_pkt_len = 60;
       break;
     case 'U':
       promisc = 0;
@@ -567,9 +619,9 @@ static int parse_args(int argc, char **argv) {
   }
 
   if (optind >= 0)
-    argv[optind-1] = prgname;
+    argv[optind - 1] = prgname;
 
-  ret = optind-1;
+  ret = optind - 1;
   optind = 1;
   return ret;
 }
@@ -640,16 +692,18 @@ static void print_hw_stats(int port_id) {
 /* ************************************ */
 
 static void print_stats(void) {
-  pfring_ft_stats fstat_sum = { 0 };
+  pfring_ft_stats fstat_sum = {0};
   pfring_ft_stats *fstat;
-  struct rte_eth_stats pstats = { 0 };
-  static struct timeval start_time = { 0 };
-  static struct timeval last_time = { 0 };
+  struct rte_eth_stats pstats = {0};
+  static struct timeval start_time = {0};
+  static struct timeval last_time = {0};
   struct timeval end_time;
   unsigned long long n_bytes = 0, n_pkts = 0, n_drops = 0;
   unsigned long long tx_n_bytes = 0, tx_n_pkts = 0, tx_n_drops = 0;
   unsigned long long q_n_bytes = 0, q_n_pkts = 0;
-  double diff, bytes_diff;
+  static u_int64_t last_pkts = 0, tx_last_pkts = 0;
+  static u_int64_t last_bytes = 0, tx_last_bytes = 0;
+  u_int64_t diff, bytes_diff;
   double delta_last = 0;
   char buf[512];
   int len, q;
@@ -671,54 +725,51 @@ static void print_stats(void) {
   memcpy(&last_time, &end_time, sizeof(last_time));
 
   for (q = 0; q < num_queues; q++) {
-    q_n_pkts = stats[q].num_pkts;
-    q_n_bytes = stats[q].num_bytes;
-
-    /* Reading port packets/bytes with rte_eth_stats_get
-     * n_pkts  += q_n_pkts;
-     * n_bytes += q_n_bytes; */
 
     if (test_tx) {
       q_n_pkts = stats[q].tx_num_pkts;
       q_n_bytes = q_n_pkts * (tx_test_pkt_len + 24);
+      tx_n_pkts += q_n_pkts;
+      tx_n_bytes += q_n_bytes;
+    } else {
+      q_n_pkts = stats[q].num_pkts;
+      q_n_bytes = stats[q].num_bytes;
+      n_pkts += q_n_pkts;
+      n_bytes += q_n_bytes;
     }
 
     // if (num_queues > 1) {
-      len = snprintf(buf, sizeof(buf), "[Q#%u]   ", q);
+    len = snprintf(buf, sizeof(buf), "[Q#%u]   ", q);
 
-      if (!test_tx)
-        len += snprintf(&buf[len], sizeof(buf) - len,
-            "Packets: %llu\t"
-            "Bytes: %llu\t", 
-            q_n_pkts, 
-            q_n_bytes);
+    if (!test_tx)
+      len += snprintf(&buf[len], sizeof(buf) - len,
+                      "Packets: %llu\t"
+                      "Bytes: %llu\t",
+                      q_n_pkts, q_n_bytes);
 
-      if (delta_last) {
-        diff = q_n_pkts - stats[q].last_pkts;
-        bytes_diff = q_n_bytes - stats[q].last_bytes;
-        bytes_diff /= (1000*1000*1000)/8;
+    if (delta_last) {
+      diff = q_n_pkts - stats[q].last_pkts;
+      bytes_diff = q_n_bytes - stats[q].last_bytes;
+      bytes_diff /= (1000 * 1000 * 1000) / 8;
 
-        len += snprintf(&buf[len], sizeof(buf) - len,
-            "Throughput: %.3f Mpps",
-            ((double) diff / (double)(delta_last/1000)) / 1000000);
+      len += snprintf(&buf[len], sizeof(buf) - len, "Throughput: %.3f Mpps",
+                      ((double)diff / (double)(delta_last / 1000)) / 1000000);
 
-        len += snprintf(&buf[len], sizeof(buf) - len,
-          " (%.3f Gbps)\t",
-          ((double) bytes_diff / (double)(delta_last/1000)));
-      }
-      stats[q].last_pkts = q_n_pkts;
-      stats[q].last_bytes = q_n_bytes;
+      len += snprintf(&buf[len], sizeof(buf) - len, " (%.3f Gbps)\t",
+                      ((double)bytes_diff / (double)(delta_last / 1000)));
+    }
+    stats[q].last_pkts = q_n_pkts;
+    stats[q].last_bytes = q_n_bytes;
 
-      if (twin_port != 0xFF || test_tx)
-        len += snprintf(&buf[len], sizeof(buf) - len,
-            "            \t"
-            "TXPackets: %ju\t"
-            "            \t"
-            "TXDrops: %ju\t",
-            stats[q].tx_num_pkts,
-            stats[q].tx_drops);
+    if (twin_port != 0xFF || test_tx)
+      len += snprintf(&buf[len], sizeof(buf) - len,
+                      "            \t"
+                      "TXPackets: %ju\t"
+                      "            \t"
+                      "TXDrops: %ju\t",
+                      stats[q].tx_num_pkts, stats[q].tx_drops);
 
-      fprintf(stderr, "%s\n", buf);
+    fprintf(stderr, "%s\n", buf);
     //}
 
     if (compute_flows && (fstat = pfring_ft_get_stats(fts[q]))) {
@@ -729,61 +780,76 @@ static void print_stats(void) {
     }
   }
 
-  if (test_tx) {
-    /* Calling rte_eth_stats_get just to print perf stats */
-    rte_eth_stats_get(port, &pstats);
-    return;
-  }
-
   if (rte_eth_stats_get(port, &pstats) == 0) {
-    n_pkts  = pstats.ipackets;
+    n_pkts = pstats.ipackets;
     n_bytes = pstats.ibytes + (n_pkts * 24);
     n_drops = pstats.imissed + pstats.ierrors;
-    tx_n_pkts  = pstats.opackets;
+    tx_n_pkts = pstats.opackets;
     tx_n_bytes = pstats.obytes + (tx_n_pkts * 24);
     tx_n_drops = pstats.oerrors;
 
     if (twin_port != 0xFF && twin_port != port) {
       if (rte_eth_stats_get(twin_port, &pstats) == 0) {
-        n_pkts  += pstats.ipackets;
+        n_pkts += pstats.ipackets;
         n_bytes += pstats.ibytes + (n_pkts * 24);
         n_drops += pstats.imissed + pstats.ierrors;
-        tx_n_pkts  += pstats.opackets;
+        tx_n_pkts += pstats.opackets;
         tx_n_bytes += pstats.obytes + (tx_n_pkts * 24);
         tx_n_drops += pstats.oerrors;
       }
     }
   }
 
+  if (num_queues < 2)
+    return;
+
   len = snprintf(buf, sizeof(buf), "[Total] ");
 
   if (compute_flows)
     len += snprintf(&buf[len], sizeof(buf) - len,
-        "ActFlows: %ju\t"
-        "TotFlows: %ju\t"
-        "Errors: %ju\t",
-        fstat_sum.active_flows,
-        fstat_sum.flows,
-        fstat_sum.err_no_room + fstat_sum.err_no_mem);
+                    "ActFlows: %ju\t"
+                    "TotFlows: %ju\t"
+                    "Errors: %ju\t",
+                    fstat_sum.active_flows, fstat_sum.flows,
+                    fstat_sum.err_no_room + fstat_sum.err_no_mem);
 
   len += snprintf(&buf[len], sizeof(buf) - len,
-      "Packets: %llu\t"
-      "Bytes: %llu\t",
-      n_pkts,
-      n_bytes);
+                  "Packets: %llu\t"
+                  "Bytes: %llu\t",
+                  n_pkts, n_bytes);
 
-  len += snprintf(&buf[len], sizeof(buf) - len,
-      "Drops: %llu\t",
-      n_drops);
+  if (delta_last) {
+    if (test_tx) {
+      diff = tx_n_pkts - tx_last_pkts;
+      bytes_diff = tx_n_bytes - tx_last_bytes;
+      bytes_diff /= (1000 * 1000 * 1000) / 8;
+    } else {
+      diff = n_pkts - last_pkts;
+      bytes_diff = n_bytes - last_bytes;
+      bytes_diff /= (1000 * 1000 * 1000) / 8;
+    }
+
+    len += snprintf(&buf[len], sizeof(buf) - len,
+                    "Throughput: %.3f Mpps (%.3f Gbps)\t",
+                    ((double)diff / (double)(delta_last / 1000)) / 1000000,
+                    ((double)bytes_diff / (double)(delta_last / 1000)));
+  }
+  if (test_tx) {
+    tx_last_pkts = tx_n_pkts;
+    tx_last_bytes = tx_n_bytes;
+  } else {
+    last_pkts = n_pkts;
+    last_bytes = n_bytes;
+  }
+
+  len += snprintf(&buf[len], sizeof(buf) - len, "Drops: %llu\t", n_drops);
 
   if (twin_port != 0xFF)
     len += snprintf(&buf[len], sizeof(buf) - len,
-        "TXPackets: %llu\t"
-        "TXBytes: %llu\t"
-        "TXDrop: %llu\t",
-        tx_n_pkts,
-        tx_n_bytes,
-        tx_n_drops);
+                    "TXPackets: %llu\t"
+                    "TXBytes: %llu\t"
+                    "TXDrop: %llu\t",
+                    tx_n_pkts, tx_n_bytes, tx_n_drops);
 
   fprintf(stderr, "%s\n---\n", buf);
 }
@@ -794,7 +860,10 @@ void sigproc(int sig) {
   static int called = 0;
 
   fprintf(stderr, "Leaving...\n");
-  if (called) return; else called = 1;
+  if (called)
+    return;
+  else
+    called = 1;
 
   do_loop = 0;
 }
@@ -816,7 +885,7 @@ int main(int argc, char *argv[]) {
   int q, ret;
   unsigned lcore_id;
   struct ether_addr mac_addr;
- 
+
   ret = rte_eal_init(argc, argv);
 
   if (ret < 0)
@@ -833,16 +902,18 @@ int main(int argc, char *argv[]) {
   memset(stats, 0, sizeof(stats));
 
   if (rte_lcore_count() > num_queues)
-    printf("INFO: %u lcores enabled, only %u used\n", rte_lcore_count(), num_queues);
+    printf("INFO: %u lcores enabled, only %u used\n", rte_lcore_count(),
+           num_queues);
 
   if (rte_lcore_count() < num_queues) {
     num_queues = rte_lcore_count();
-    printf("INFO: only %u lcores enabled, using %u queues\n", rte_lcore_count(), num_queues);
+    printf("INFO: only %u lcores enabled, using %u queues\n", rte_lcore_count(),
+           num_queues);
     return -1;
   }
 
   if (port_init() != 0)
-    rte_exit(EXIT_FAILURE, "Cannot init port %"PRIu8 "\n", port);
+    rte_exit(EXIT_FAILURE, "Cannot init port %" PRIu8 "\n", port);
 
   if (compute_flows) {
     for (q = 0; q < num_queues; q++) {
@@ -870,9 +941,7 @@ int main(int argc, char *argv[]) {
 
   rte_eal_mp_remote_launch(packet_consumer, NULL, CALL_MASTER);
 
-  RTE_LCORE_FOREACH_SLAVE(lcore_id) {
-    rte_eal_wait_lcore(lcore_id);
-  } 
+  RTE_LCORE_FOREACH_SLAVE(lcore_id) { rte_eal_wait_lcore(lcore_id); }
 
   if (compute_flows) {
     for (q = 0; q < num_queues; q++)
@@ -886,4 +955,3 @@ int main(int argc, char *argv[]) {
 
   return 0;
 }
-

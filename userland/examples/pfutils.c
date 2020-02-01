@@ -132,6 +132,8 @@ static void forge_udp_packet_fast(u_char *buffer, u_int packet_len, u_int idx) {
   int i;
   struct compact_ip_hdr *ip_header;
   struct compact_udp_hdr *udp_header;
+  int reforge_src_mac = 0, reforge_dst_mac = 0;
+  char srcmac[6] = { 0 }, dstmac[6] = { 0 };
   u_int32_t src_ip = 0x0A000000; /* 10.0.0.0 */ 
   u_int32_t dst_ip =  0xC0A80001; /* 192.168.0.1 */
   u_int16_t src_port = 2012, dst_port = 3000;
@@ -150,7 +152,10 @@ static void forge_udp_packet_fast(u_char *buffer, u_int packet_len, u_int idx) {
 #endif
 
   if (idx == 0) { /* first packet, precomputing headers */
-    for(i = 0; i < 12; i++) buffer[i] = i;
+
+    // for(i=0; i<12; i++) buffer[i] = i;
+    if(reforge_dst_mac) memcpy(buffer, dstmac, 6);
+    if(reforge_src_mac) memcpy(&buffer[6], srcmac, 6);
     buffer[12] = 0x08, buffer[13] = 0x00; /* IP */
 
     ip_header = (struct compact_ip_hdr*) &buffer[sizeof(struct ether_header)];
@@ -198,9 +203,9 @@ static void forge_udp_packet_fast(u_char *buffer, u_int packet_len, u_int idx) {
 
 #if !defined(HAVE_DPDK)
 static int ip_offset = 0;
-static int reforge_src_mac = 0, reforge_dst_mac = 0;
 static int forge_vlan = 0, num_vlan = 1;
 static int forge_payload = 0;
+static int reforge_src_mac = 0, reforge_dst_mac = 0;
 static char srcmac[6] = { 0 }, dstmac[6] = { 0 };
 static struct in_addr srcaddr = { 0 }, dstaddr = { 0 };
 
@@ -217,7 +222,7 @@ static void forge_udp_packet(u_char *buffer, u_int buffer_len, u_int idx, u_int 
 
   l2_len = sizeof(struct ether_header);
 
-  for(i=0; i<12; i++) buffer[i] = i;
+  // for(i=0; i<12; i++) buffer[i] = i;
   if(reforge_dst_mac) memcpy(buffer, dstmac, 6);
   if(reforge_src_mac) memcpy(&buffer[6], srcmac, 6);
 
