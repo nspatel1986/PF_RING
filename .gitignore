@@ -30,6 +30,7 @@ Thumbs.db
 .pydevproject
 .subversion
 *.3pcap
+.vscode
 
 # configure and others
 acinclude.m4
